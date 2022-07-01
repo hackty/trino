@@ -61,6 +61,7 @@ import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.requireNonNull;
 import static java.util.regex.Matcher.quoteReplacement;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * This test requires these variables to connect to GCS:
@@ -293,5 +294,60 @@ public class TestDeltaLakeGcsConnectorSmokeTest
                 "AS VALUES (1, 'a', TIMESTAMP '2020-01-01 01:22:34.000 UTC'), (2, 'b', TIMESTAMP '2021-01-01 01:22:34.000 UTC')", 2);
         assertQuery("SELECT a, b, CAST(c AS VARCHAR) FROM " + tableName, "VALUES (1, 'a', '2020-01-01 01:22:34.000 UTC'), (2, 'b', '2021-01-01 01:22:34.000 UTC')");
         assertUpdate("DROP TABLE " + tableName);
+    }
+
+    @Override
+    public void testRenameExternalTable()
+    {
+        String oldTable = "test_external_table_rename_old_" + randomTableSuffix();
+
+        assertUpdate(format("CREATE TABLE %s (a bigint, b double) WITH (location = '%s')", oldTable, getLocationForTable(bucketName, oldTable)));
+        assertUpdate("INSERT INTO " + oldTable + " VALUES (42, 43)", 1);
+        String oldLocation = (String) computeScalar("SELECT \"$path\" FROM " + oldTable);
+
+        String newTable = "test_rename_new_" + randomTableSuffix();
+        assertUpdate("ALTER TABLE " + oldTable + " RENAME TO " + newTable);
+
+        assertThat(query("SHOW TABLES LIKE '" + oldTable + "'"))
+                .returnsEmptyResult();
+        assertThat(query("SELECT a, b FROM " + newTable))
+                .matches("VALUES (BIGINT '42', DOUBLE '43')");
+        assertThat((String) computeScalar("SELECT \"$path\" FROM " + newTable))
+                .isEqualTo(oldLocation);
+
+        assertQueryFails("INSERT INTO " + newTable + " (a, b) VALUES (42, -38.5)", "Inserts are not supported on the gs filesystem");
+
+        assertUpdate("DROP TABLE " + newTable);
+    }
+
+    @Override
+    public void testRenameExternalTableAcrossSchemas()
+    {
+        String oldTable = "test_rename_old_" + randomTableSuffix();
+        assertUpdate(format("CREATE TABLE %s (a bigint, b double) WITH (location = '%s')", oldTable, getLocationForTable(bucketName, oldTable)));
+        assertUpdate("INSERT INTO " + oldTable + " VALUES (42, 43)", 1);
+        String oldLocation = (String) computeScalar("SELECT \"$path\" FROM " + oldTable);
+
+        String schemaName = "test_schema_" + randomTableSuffix();
+        assertUpdate(createSchemaSql(schemaName));
+
+        String newTableName = "test_rename_new_" + randomTableSuffix();
+        String newTable = schemaName + "." + newTableName;
+        assertUpdate("ALTER TABLE " + oldTable + " RENAME TO " + newTable);
+
+        assertThat(query("SHOW TABLES LIKE '" + oldTable + "'"))
+                .returnsEmptyResult();
+        assertThat(query("SELECT a, b FROM " + newTable))
+                .matches("VALUES (BIGINT '42', DOUBLE '43')");
+        assertThat((String) computeScalar("SELECT \"$path\" FROM " + newTable))
+                .isEqualTo(oldLocation);
+
+        assertQueryFails("INSERT INTO " + newTable + " (a, b) VALUES (42, -38.5)", "Inserts are not supported on the gs filesystem");
+
+        assertUpdate("DROP TABLE " + newTable);
+        assertThat(query("SHOW TABLES LIKE '" + newTable + "'"))
+                .returnsEmptyResult();
+
+        assertUpdate("DROP SCHEMA " + schemaName);
     }
 }
