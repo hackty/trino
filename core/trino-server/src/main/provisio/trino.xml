@@ -164,6 +164,12 @@
         </artifact>
     </artifactSet>
 
+    <artifactSet to="plugin/gaussdb">
+        <artifact id="${project.groupId}:trino-teradata:zip:${project.version}">
+            <unpack />
+        </artifact>
+    </artifactSet>
+
     <artifactSet to="plugin/prometheus">
         <artifact id="${project.groupId}:trino-prometheus:zip:${project.version}">
             <unpack />

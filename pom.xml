@@ -122,6 +122,7 @@
         <module>plugin/trino-elasticsearch</module>
         <module>plugin/trino-example-http</module>
         <module>plugin/trino-exchange-filesystem</module>
+        <module>plugin/trino-gaussdb</module>
         <module>plugin/trino-geospatial</module>
         <module>plugin/trino-google-sheets</module>
         <module>plugin/trino-hive</module>
@@ -1130,6 +1131,12 @@
                 <groupId>com.h2database</groupId>
                 <artifactId>h2</artifactId>
                 <version>1.4.200</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.huawei.gsjdbc</groupId>
+                <artifactId>gsjdbc4</artifactId>
+                <version>V100R003C10SPC115</version>
             </dependency>
 
             <dependency>

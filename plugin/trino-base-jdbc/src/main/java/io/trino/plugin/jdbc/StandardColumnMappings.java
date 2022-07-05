@@ -421,7 +421,7 @@ public final class StandardColumnMappings
             {
                 // 'ResultSet.getObject' without class name may throw an exception
                 // e.g. in MySQL driver, rs.getObject(int) throws for dates between Oct 5 and 14, 1582
-                resultSet.getObject(columnIndex, LocalDate.class);
+                resultSet.getDate(columnIndex);
                 return resultSet.wasNull();
             }
 
@@ -429,7 +429,7 @@ public final class StandardColumnMappings
             public long readLong(ResultSet resultSet, int columnIndex)
                     throws SQLException
             {
-                LocalDate value = resultSet.getObject(columnIndex, LocalDate.class);
+                LocalDate value = resultSet.getDate(columnIndex).toLocalDate();
                 // Some drivers (e.g. MemSQL's) return null LocalDate even though the value isn't null
                 if (value == null) {
                     throw new TrinoException(JDBC_ERROR, "Driver returned null LocalDate for a non-null value");
