@@ -41,10 +41,7 @@ import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.*;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
@@ -442,7 +439,13 @@ public final class StandardColumnMappings
 
     public static LongWriteFunction dateWriteFunctionUsingLocalDate()
     {
-        return LongWriteFunction.of(Types.DATE, (statement, index, value) -> statement.setObject(index, LocalDate.ofEpochDay(value)));
+//        return LongWriteFunction.of(Types.DATE, (statement, index, value) -> statement.setObject(index, LocalDate.ofEpochDay(value)));
+        return LongWriteFunction.of(Types.DATE, (statement, index, value) -> {
+            LocalDate date = LocalDate.ofEpochDay(value);
+            ZoneId zone = ZoneId.systemDefault();
+            Instant instant = date.atStartOfDay().atZone(zone).toInstant();
+            java.util.Date da = Date.from(instant);
+            statement.setDate(index, new Date(da.getTime()));});
     }
 
     /**
