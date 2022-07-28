@@ -45,6 +45,9 @@ import static io.trino.spi.type.DoubleType.DOUBLE;
 import static io.trino.spi.type.IntegerType.INTEGER;
 import static io.trino.spi.type.RealType.REAL;
 import static io.trino.spi.type.SmallintType.SMALLINT;
+import static io.trino.spi.type.TimeType.createTimeType;
+import static io.trino.spi.type.TimestampType.MAX_SHORT_PRECISION;
+import static io.trino.spi.type.TimestampType.createTimestampType;
 import static io.trino.spi.type.TinyintType.TINYINT;
 import static io.trino.spi.type.VarbinaryType.VARBINARY;
 import static java.lang.Float.floatToRawIntBits;
@@ -55,6 +58,8 @@ import static java.lang.String.format;
 
 public class TeradataClient extends BaseJdbcClient {
 
+
+    private static final int TD_MAX_SUPPORTED_TIMESTAMP_PRECISION = 6;
 
     @Inject
     public TeradataClient(BaseJdbcConfig config,
@@ -211,13 +216,13 @@ public class TeradataClient extends BaseJdbcClient {
             case Types.DATE:
                 return Optional.of(dateColumnMappingUsingLocalDate());
 
-//            case Types.TIME:
-//                TimeType timeType = createTimeType(getTimePrecision(typeHandle.getRequiredColumnSize()));
-//                return Optional.of(timeColumnMapping(timeType));
-//
-//            case Types.TIMESTAMP:
-//                TimestampType timestampType = createTimestampType(getTimestampPrecision(typeHandle.getRequiredColumnSize()));
-//                return Optional.of(timestampColumnMapping(timestampType));
+            case Types.TIME:
+                TimeType timeType = createTimeType(getTimePrecision(typeHandle.getRequiredColumnSize()));
+                return Optional.of(timeColumnMapping(timeType));
+
+            case Types.TIMESTAMP:
+                int precisions = typeHandle.getRequiredDecimalDigits();
+                return Optional.of(timestampColumnMapping(createTimestampType(precisions)));
         }
 
         if (getUnsupportedTypeHandling(session) == CONVERT_TO_VARCHAR) {
@@ -226,6 +231,25 @@ public class TeradataClient extends BaseJdbcClient {
 
         return Optional.empty();
     }
+
+    private static int getTimePrecision(int timeColumnSize)
+    {
+//        if (timeColumnSize == ZERO_PRECISION_TIME_COLUMN_SIZE) {
+//            return 0;
+//        }
+//        int timePrecision = timeColumnSize - ZERO_PRECISION_TIME_COLUMN_SIZE - 1;
+        return 0;
+    }
+
+//    private static int getTimestampPrecision(int timestampColumnSize)
+//    {
+//        if (timestampColumnSize == ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE) {
+//            return 0;
+//        }
+//        int timestampPrecision = timestampColumnSize - ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE - 1;
+//        verify(1 <= timestampPrecision && timestampPrecision <= MAX_SUPPORTED_DATE_TIME_PRECISION, "Unexpected timestamp precision %s calculated from timestamp column size %s", timestampPrecision, timestampColumnSize);
+//        return timestampPrecision;
+//    }
 
     @Override
     public WriteMapping toWriteMapping(ConnectorSession session, Type type)
@@ -287,23 +311,23 @@ public class TeradataClient extends BaseJdbcClient {
             return WriteMapping.longMapping("date", dateWriteFunctionUsingLocalDate());
         }
 
-//        if (type instanceof TimeType) {
-//            TimeType timeType = (TimeType) type;
-//            if (timeType.getPrecision() <= POSTGRESQL_MAX_SUPPORTED_TIMESTAMP_PRECISION) {
-//                return WriteMapping.longMapping(format("time(%s)", timeType.getPrecision()), timeWriteFunction(timeType.getPrecision()));
-//            }
-//            return WriteMapping.longMapping(format("time(%s)", POSTGRESQL_MAX_SUPPORTED_TIMESTAMP_PRECISION), timeWriteFunction(POSTGRESQL_MAX_SUPPORTED_TIMESTAMP_PRECISION));
-//        }
+        if (type instanceof TimeType) {
+            TimeType timeType = (TimeType) type;
+            if (timeType.getPrecision() <= TD_MAX_SUPPORTED_TIMESTAMP_PRECISION) {
+                return WriteMapping.longMapping(format("time(%s)", timeType.getPrecision()), timeWriteFunction(timeType.getPrecision()));
+            }
+            return WriteMapping.longMapping(format("time(%s)", TD_MAX_SUPPORTED_TIMESTAMP_PRECISION), timeWriteFunction(TD_MAX_SUPPORTED_TIMESTAMP_PRECISION));
+        }
 
-//        if (type instanceof TimestampType) {
-//            TimestampType timestampType = (TimestampType) type;
-//            if (timestampType.getPrecision() <= POSTGRESQL_MAX_SUPPORTED_TIMESTAMP_PRECISION) {
-//                verify(timestampType.getPrecision() <= TimestampType.MAX_SHORT_PRECISION);
-//                return WriteMapping.longMapping(format("timestamp(%s)", timestampType.getPrecision()), PostgreSqlClient::shortTimestampWriteFunction);
-//            }
-//            verify(timestampType.getPrecision() > TimestampType.MAX_SHORT_PRECISION);
-//            return WriteMapping.objectMapping(format("timestamp(%s)", POSTGRESQL_MAX_SUPPORTED_TIMESTAMP_PRECISION), longTimestampWriteFunction());
-//        }
+        if (type instanceof TimestampType) {
+            TimestampType timestampType = (TimestampType) type;
+            int precision = min(timestampType.getPrecision(), TD_MAX_SUPPORTED_TIMESTAMP_PRECISION);
+            String dataType = format("datetime2(%d)", precision);
+            if (timestampType.getPrecision() <= MAX_SHORT_PRECISION) {
+                return WriteMapping.longMapping(dataType, timestampWriteFunction(timestampType));
+            }
+            return WriteMapping.objectMapping(dataType, longTimestampWriteFunction(timestampType, precision));
+        }
 //        if (type instanceof TimestampWithTimeZoneType) {
 //            TimestampWithTimeZoneType timestampWithTimeZoneType = (TimestampWithTimeZoneType) type;
 //            if (timestampWithTimeZoneType.getPrecision() <= POSTGRESQL_MAX_SUPPORTED_TIMESTAMP_PRECISION) {

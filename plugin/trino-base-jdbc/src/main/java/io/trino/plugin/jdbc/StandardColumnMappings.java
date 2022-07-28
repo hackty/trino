@@ -502,7 +502,7 @@ public final class StandardColumnMappings
         requireNonNull(timeType, "timeType is null");
         checkArgument(timeType.getPrecision() <= 9, "Unsupported type precision: %s", timeType);
         return (resultSet, columnIndex) -> {
-            LocalTime time = resultSet.getObject(columnIndex, LocalTime.class);
+            LocalTime time = resultSet.getTime(columnIndex).toLocalTime();
             long nanosOfDay = time.toNanoOfDay();
             verify(nanosOfDay < NANOSECONDS_PER_DAY, "Invalid value of nanosOfDay: %s", nanosOfDay);
             long picosOfDay = nanosOfDay * PICOSECONDS_PER_NANOSECOND;
@@ -523,7 +523,7 @@ public final class StandardColumnMappings
             if (picosOfDay == PICOSECONDS_PER_DAY) {
                 picosOfDay = 0;
             }
-            statement.setObject(index, fromTrinoTime(picosOfDay));
+            statement.setTime(index, Time.valueOf(fromTrinoTime(picosOfDay)));
         });
     }
 
@@ -574,7 +574,11 @@ public final class StandardColumnMappings
     public static LongReadFunction timestampReadFunction(TimestampType timestampType)
     {
         checkArgument(timestampType.getPrecision() <= TimestampType.MAX_SHORT_PRECISION, "Precision is out of range: %s", timestampType.getPrecision());
-        return (resultSet, columnIndex) -> toTrinoTimestamp(timestampType, resultSet.getObject(columnIndex, LocalDateTime.class));
+        return (resultSet, columnIndex) -> {
+            Instant instant = Instant.ofEpochMilli(resultSet.getTimestamp(columnIndex).getTime());
+            ZoneId zone = ZoneId.systemDefault();
+            return toTrinoTimestamp(timestampType, LocalDateTime.ofInstant(instant, zone));
+        };
     }
 
     private static ObjectReadFunction longTimestampReadFunction(TimestampType timestampType)
@@ -602,7 +606,7 @@ public final class StandardColumnMappings
     public static LongWriteFunction timestampWriteFunction(TimestampType timestampType)
     {
         checkArgument(timestampType.getPrecision() <= TimestampType.MAX_SHORT_PRECISION, "Precision is out of range: %s", timestampType.getPrecision());
-        return LongWriteFunction.of(Types.TIMESTAMP, (statement, index, value) -> statement.setObject(index, fromTrinoTimestamp(value)));
+        return LongWriteFunction.of(Types.TIMESTAMP, (statement, index, value) -> statement.setTimestamp(index, Timestamp.valueOf(fromTrinoTimestamp(value))));
     }
 
     public static ObjectWriteFunction longTimestampWriteFunction(TimestampType timestampType, int roundToPrecision)

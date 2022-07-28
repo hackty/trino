@@ -438,12 +438,12 @@ public class GaussDbClient
 //            case Types.TIME:
 //                return Optional.of(timeColumnMapping(typeHandle.getRequiredDecimalDigits()));
 //
-//            case Types.TIMESTAMP:
-//                TimestampType timestampType = createTimestampType(typeHandle.getRequiredDecimalDigits());
-//                return Optional.of(ColumnMapping.longMapping(
-//                        timestampType,
-//                        timestampReadFunction(timestampType),
-//                        GaussDbClient::shortTimestampWriteFunction));
+            case Types.TIMESTAMP:
+                TimestampType timestampType = createTimestampType(typeHandle.getRequiredDecimalDigits());
+                return Optional.of(ColumnMapping.longMapping(
+                        timestampType,
+                        timestampReadFunction(timestampType),
+                        GaussDbClient::shortTimestampWriteFunction));
 
 //            case Types.ARRAY:
 //                Optional<ColumnMapping> columnMapping = arrayToTrinoType(session, connection, typeHandle);
