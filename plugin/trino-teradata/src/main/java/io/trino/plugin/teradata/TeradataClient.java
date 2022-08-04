@@ -13,12 +13,21 @@
  */
 package io.trino.plugin.teradata;
 
+import com.google.common.collect.ImmutableSet;
+import io.trino.plugin.base.aggregation.AggregateFunctionRewriter;
+import io.trino.plugin.base.aggregation.AggregateFunctionRule;
+import io.trino.plugin.base.expression.ConnectorExpressionRewriter;
 import io.trino.plugin.jdbc.*;
+import io.trino.plugin.jdbc.aggregation.*;
+import io.trino.plugin.jdbc.expression.JdbcConnectorExpressionRewriterBuilder;
+import io.trino.plugin.jdbc.expression.RewriteComparison;
 import io.trino.plugin.jdbc.mapping.IdentifierMapping;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.AggregateFunction;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ConnectorSession;
+import io.trino.spi.expression.ConnectorExpression;
+import io.trino.spi.predicate.Domain;
 import io.trino.spi.type.*;
 
 import javax.inject.Inject;
@@ -30,6 +39,7 @@ import java.util.*;
 import static io.trino.plugin.jdbc.DecimalConfig.DecimalMapping.ALLOW_OVERFLOW;
 import static io.trino.plugin.jdbc.DecimalSessionSessionProperties.*;
 import static io.trino.plugin.jdbc.JdbcErrorCode.JDBC_ERROR;
+import static io.trino.plugin.jdbc.JdbcMetadataSessionProperties.getDomainCompactionThreshold;
 import static io.trino.plugin.jdbc.PredicatePushdownController.DISABLE_PUSHDOWN;
 import static io.trino.plugin.jdbc.PredicatePushdownController.FULL_PUSHDOWN;
 import static io.trino.plugin.jdbc.StandardColumnMappings.*;
@@ -61,6 +71,10 @@ public class TeradataClient extends BaseJdbcClient {
 
     private static final int TD_MAX_SUPPORTED_TIMESTAMP_PRECISION = 6;
 
+    private final AggregateFunctionRewriter<JdbcExpression, String> aggregateFunctionRewriter;
+
+    private final ConnectorExpressionRewriter<String> connectorExpressionRewriter;
+
     @Inject
     public TeradataClient(BaseJdbcConfig config,
                           JdbcStatisticsConfig statisticsConfig,
@@ -69,6 +83,40 @@ public class TeradataClient extends BaseJdbcClient {
                           TypeManager typeManager,
                           IdentifierMapping identifierMapping) {
         super(config, "", connectionFactory, queryBuilder, identifierMapping);
+        this.connectorExpressionRewriter = JdbcConnectorExpressionRewriterBuilder.newBuilder()
+                .addStandardRules(this::quoted)
+                // TODO allow all comparison operators for numeric types
+                .add(new RewriteComparison(ImmutableSet.of(RewriteComparison.ComparisonOperator.EQUAL, RewriteComparison.ComparisonOperator.NOT_EQUAL)))
+                .withTypeClass("integer_type", ImmutableSet.of("tinyint", "smallint", "integer", "bigint"))
+                .map("$add(left: integer_type, right: integer_type)").to("left + right")
+                .map("$subtract(left: integer_type, right: integer_type)").to("left - right")
+                .map("$multiply(left: integer_type, right: integer_type)").to("left * right")
+                .map("$divide(left: integer_type, right: integer_type)").to("left / right")
+                .map("$modulus(left: integer_type, right: integer_type)").to("left % right")
+                .map("$negate(value: integer_type)").to("-value")
+                .map("$like_pattern(value: varchar, pattern: varchar): boolean").to("value LIKE pattern")
+                .map("$like_pattern(value: varchar, pattern: varchar, escape: varchar(1)): boolean").to("value LIKE pattern ESCAPE escape")
+                .map("$not($is_null(value))").to("value IS NOT NULL")
+                .map("$not(value: boolean)").to("NOT value")
+                .map("$is_null(value)").to("value IS NULL")
+                .map("$nullif(first, second)").to("NULLIF(first, second)")
+                .build();
+        this.aggregateFunctionRewriter = new AggregateFunctionRewriter<>(
+                this.connectorExpressionRewriter,
+                ImmutableSet.<AggregateFunctionRule<JdbcExpression, String>>builder()
+                        .add(new ImplementMinMax(false))
+                        .add(new ImplementAvgFloatingPoint())
+                        .add(new ImplementAvgDecimal())
+                        .add(new ImplementStddevSamp())
+                        .add(new ImplementStddevPop())
+                        .add(new ImplementVarianceSamp())
+                        .add(new ImplementVariancePop())
+                        .add(new ImplementCovarianceSamp())
+                        .add(new ImplementCovariancePop())
+                        .add(new ImplementCorr())
+                        .add(new ImplementRegrIntercept())
+                        .add(new ImplementRegrSlope())
+                        .build());
     }
 
 
@@ -357,7 +405,23 @@ public class TeradataClient extends BaseJdbcClient {
     @Override
     public boolean supportsAggregationPushdown(ConnectorSession session, JdbcTableHandle table, List<AggregateFunction> aggregates, Map<String, ColumnHandle> assignments, List<List<ColumnHandle>> groupingSets)
     {
+        // Postgres sorts textual types differently compared to Trino so we cannot safely pushdown any aggregations which take a text type as an input or as part of grouping set
         return preventTextualTypeAggregationPushdown(groupingSets);
     }
+
+    @Override
+    public Optional<JdbcExpression> implementAggregation(ConnectorSession session, AggregateFunction aggregate, Map<String, ColumnHandle> assignments)
+    {
+        // TODO support complex ConnectorExpressions
+        return aggregateFunctionRewriter.rewrite(session, aggregate, assignments);
+    }
+
+    @Override
+    public Optional<String> convertPredicate(ConnectorSession session, ConnectorExpression expression, Map<String, ColumnHandle> assignments)
+    {
+        return connectorExpressionRewriter.rewrite(session, expression, assignments);
+    }
+
+    private static final PredicatePushdownController POSTGRESQL_STRING_COLLATION_AWARE_PUSHDOWN = (session, domain) -> FULL_PUSHDOWN.apply(session, domain);
 
 }
