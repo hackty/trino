@@ -26,13 +26,16 @@ import io.trino.spi.TrinoException;
 import io.trino.spi.connector.AggregateFunction;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ConnectorSession;
+import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.expression.ConnectorExpression;
 import io.trino.spi.predicate.Domain;
+import io.trino.spi.security.ConnectorIdentity;
 import io.trino.spi.type.*;
 
 import javax.inject.Inject;
 import java.sql.Connection;
 
+import java.sql.SQLException;
 import java.sql.Types;
 import java.util.*;
 
@@ -64,6 +67,7 @@ import static java.lang.Float.floatToRawIntBits;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.lang.String.format;
+import static java.util.stream.Collectors.joining;
 
 
 public class TeradataClient extends BaseJdbcClient {
@@ -119,8 +123,19 @@ public class TeradataClient extends BaseJdbcClient {
                         .build());
     }
 
+    @Override
+    protected void copyTableSchema(Connection connection, String catalogName, String schemaName, String tableName, String newTableName, List<String> columnNames) {
+        String sql = format(
+                "CREATE TABLE %s AS ( SELECT %s FROM %s ) WITH NO DATA",
+                quoted(catalogName, schemaName, newTableName),
+                columnNames.stream()
+                        .map(this::quoted)
+                        .collect(joining(", ")),
+                quoted(catalogName, schemaName, tableName));
+        execute(connection, sql);
+    }
 
-//    @Override
+    //    @Override
 //    public Collection<String> listSchemas(Connection connection) {
 //        try(ResultSet resultSet = connection.getMetaData().getSchemas()){
 //            ImmutableSet.Builder<String> schemas = ImmutableSet.builder();
@@ -400,6 +415,26 @@ public class TeradataClient extends BaseJdbcClient {
 //        }
 
         throw new TrinoException(NOT_SUPPORTED, "Unsupported column type: " + type.getDisplayName());
+    }
+
+    @Override
+    protected void renameTable(ConnectorSession session, String catalogName, String remoteSchemaName, String remoteTableName, SchemaTableName newTable)
+    {
+        try (Connection connection = connectionFactory.openConnection(session)) {
+            String newSchemaName = newTable.getSchemaName();
+            String newTableName = newTable.getTableName();
+            ConnectorIdentity identity = session.getIdentity();
+            String newRemoteSchemaName = getIdentifierMapping().toRemoteSchemaName(identity, connection, newSchemaName);
+            String newRemoteTableName = getIdentifierMapping().toRemoteTableName(identity, connection, newRemoteSchemaName, newTableName);
+            String sql = format(
+                    "RENAME TABLE %s AS %s",
+                    quoted(catalogName, remoteSchemaName, remoteTableName),
+                    quoted(catalogName, newRemoteSchemaName, newRemoteTableName));
+            execute(connection, sql);
+        }
+        catch (SQLException e) {
+            throw new TrinoException(JDBC_ERROR, e);
+        }
     }
 
     @Override

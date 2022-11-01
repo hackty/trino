@@ -70,6 +70,7 @@ import static io.trino.plugin.jdbc.JdbcMetadataSessionProperties.getDomainCompac
 import static io.trino.plugin.jdbc.PredicatePushdownController.DISABLE_PUSHDOWN;
 import static io.trino.plugin.jdbc.PredicatePushdownController.FULL_PUSHDOWN;
 import static io.trino.plugin.jdbc.StandardColumnMappings.*;
+import static io.trino.plugin.jdbc.StandardColumnMappings.timeColumnMapping;
 import static io.trino.plugin.jdbc.TypeHandlingJdbcSessionProperties.getUnsupportedTypeHandling;
 import static io.trino.plugin.jdbc.UnsupportedTypeHandling.CONVERT_TO_VARCHAR;
 import static io.trino.plugin.jdbc.UnsupportedTypeHandling.IGNORE;
@@ -434,10 +435,12 @@ public class GaussDbClient
 
             case Types.DATE:
                 return Optional.of(dateColumnMappingUsingLocalDate());
-//
-//            case Types.TIME:
-//                return Optional.of(timeColumnMapping(typeHandle.getRequiredDecimalDigits()));
-//
+
+            case Types.TIME:
+//                TimeType timeType = createTimeType(getTimePrecision(typeHandle.getRequiredColumnSize()));
+//                return Optional.of(timeColumnMapping(timeType));
+                return Optional.of(timeColumnMapping(typeHandle.getRequiredDecimalDigits()));
+
             case Types.TIMESTAMP:
                 TimestampType timestampType = createTimestampType(typeHandle.getRequiredDecimalDigits());
                 return Optional.of(ColumnMapping.longMapping(
@@ -907,7 +910,8 @@ public class GaussDbClient
         return ColumnMapping.longMapping(
                 createTimeType(precision),
                 (resultSet, columnIndex) -> {
-                    LocalTime time = resultSet.getObject(columnIndex, LocalTime.class);
+                    Time sqlTime = resultSet.getTime(columnIndex);
+                    LocalTime time = sqlTime.toLocalTime();
                     long nanosOfDay = time.toNanoOfDay();
                     if (nanosOfDay == NANOSECONDS_PER_DAY - 1) {
                         // PostgreSQL's 24:00:00 is returned as 23:59:59.999999999, regardless of column precision
