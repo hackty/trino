@@ -14,6 +14,7 @@
 package io.trino.plugin.teradata;
 
 import com.google.common.collect.ImmutableSet;
+import io.airlift.log.Logger;
 import io.trino.plugin.base.aggregation.AggregateFunctionRewriter;
 import io.trino.plugin.base.aggregation.AggregateFunctionRule;
 import io.trino.plugin.base.expression.ConnectorExpressionRewriter;
@@ -200,6 +201,7 @@ public class TeradataClient extends BaseJdbcClient {
     public Optional<ColumnMapping> toColumnMapping(ConnectorSession session, Connection connection, JdbcTypeHandle typeHandle) {
         String jdbcTypeName = typeHandle.getJdbcTypeName()
                 .orElseThrow(() -> new TrinoException(JDBC_ERROR, "Type name is missing: " + typeHandle));
+        System.out.println("test jdbcTypeName = " + jdbcTypeName);
         Optional<ColumnMapping> mapping = getForcedMappingToVarchar(typeHandle);
         if (mapping.isPresent()) {
             return mapping;
@@ -247,6 +249,14 @@ public class TeradataClient extends BaseJdbcClient {
                 return Optional.of(doubleColumnMapping());
 
             case Types.NUMERIC:
+                if(typeHandle.getColumnSize().isEmpty() || typeHandle.getColumnSize().get()>38){
+//                    System.out.println("typeHandle.getJdbcTypeName() = " + typeHandle.getJdbcTypeName());
+//                    System.out.println("typeHandle.getDecimalDigits() = " + typeHandle.getDecimalDigits());
+//                    System.out.println("typeHandle.getRequiredDecimalDigits() = " + typeHandle.getRequiredDecimalDigits());
+//                    System.out.println("typeHandle.getColumnSize() = " + typeHandle.getColumnSize());
+//                    System.out.println("typeHandle.getRequiredColumnSize() = " + typeHandle.getRequiredColumnSize());
+                    throw new TrinoException(JDBC_ERROR, "Number with precision overflow is not supported: " + typeHandle.getColumnSize().get());
+                }
             case Types.DECIMAL:
                 int decimalDigits = typeHandle.getDecimalDigits().orElseThrow(() -> new IllegalStateException("decimal digits not present"));
                 int precision = typeHandle.getRequiredColumnSize();
@@ -254,7 +264,6 @@ public class TeradataClient extends BaseJdbcClient {
                     int scale = min(decimalDigits, getDecimalDefaultScale(session));
                     return Optional.of(decimalColumnMapping(createDecimalType(Decimals.MAX_PRECISION, scale), getDecimalRoundingMode(session)));
                 }
-                // TODO does mysql support negative scale?
                 precision = precision + max(-decimalDigits, 0); // Map decimal(p, -s) (negative scale) to decimal(p+s, 0).
                 if (precision > Decimals.MAX_PRECISION) {
                     break;
