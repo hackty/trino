@@ -40,7 +40,6 @@ import io.trino.spi.statistics.TableStatistics;
 import io.trino.spi.type.*;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
-import org.postgresql.core.TypeInfo;
 
 import javax.inject.Inject;
 import java.io.IOException;

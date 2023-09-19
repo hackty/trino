@@ -575,9 +575,8 @@ public final class StandardColumnMappings
     {
         checkArgument(timestampType.getPrecision() <= TimestampType.MAX_SHORT_PRECISION, "Precision is out of range: %s", timestampType.getPrecision());
         return (resultSet, columnIndex) -> {
-            Instant instant = Instant.ofEpochMilli(resultSet.getTimestamp(columnIndex).getTime());
-            ZoneId zone = ZoneId.systemDefault();
-            return toTrinoTimestamp(timestampType, LocalDateTime.ofInstant(instant, zone));
+//            Instant instant = Instant.ofEpochMilli(resultSet.getTimestamp(columnIndex).getTime());
+            return toTrinoTimestamp(timestampType, resultSet.getTimestamp(columnIndex).toLocalDateTime());
         };
     }
 

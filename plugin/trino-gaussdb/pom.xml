@@ -48,10 +48,11 @@
             <artifactId>guice</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.huaweicloud.dws/huaweicloud-dws-jdbc -->
         <dependency>
-            <groupId>com.huawei.gsjdbc</groupId>
-            <artifactId>gsjdbc4</artifactId>
-            <version>V100R003C10SPC115</version>
+            <groupId>com.huaweicloud.dws</groupId>
+            <artifactId>huaweicloud-dws-jdbc</artifactId>
+            <version>8.2.1.1-200</version>
         </dependency>
 
         <dependency>

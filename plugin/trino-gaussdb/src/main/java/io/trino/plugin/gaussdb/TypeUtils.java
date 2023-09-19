@@ -21,7 +21,7 @@ import io.trino.spi.block.Block;
 import io.trino.spi.connector.ConnectorSession;
 import io.trino.spi.type.*;
 import org.joda.time.DateTimeZone;
-import org.postgresql.util.PGobject;
+import com.huawei.gauss200.jdbc.util.PGobject;
 
 import java.lang.reflect.Array;
 import java.math.BigDecimal;

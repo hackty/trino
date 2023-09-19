@@ -22,7 +22,7 @@ import io.trino.plugin.jdbc.*;
 import io.trino.plugin.jdbc.credential.CredentialProvider;
 import io.trino.plugin.jdbc.ptf.Query;
 import io.trino.spi.ptf.ConnectorTableFunction;
-import org.postgresql.Driver;
+import com.huawei.gauss200.jdbc.Driver;
 
 import java.util.Properties;
 
